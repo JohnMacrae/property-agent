@@ -331,7 +331,10 @@ async function launchSession(trigger, context = null, options = {}) {
   }
 
   const now = new Date();
-  const prompt = `Run session. Trigger: ${trigger}. Current time: ${now.toISOString()}.${repliesBlock}${inboxBlock}${pendingBlock}${context ? ` Context: ${context}` : ''}`;
+  const nowLocal = now.toLocaleString('sv-SE', { timeZone: 'Europe/London' }).replace(' ', 'T');
+  const tzAbbr = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', timeZoneName: 'short' })
+    .formatToParts(now).find(p => p.type === 'timeZoneName')?.value || 'Europe/London';
+  const prompt = `Run session. Trigger: ${trigger}. Current time: ${nowLocal} ${tzAbbr} (Europe/London).${repliesBlock}${inboxBlock}${pendingBlock}${context ? ` Context: ${context}` : ''}`;
 
   const args = [
     RUNNER_PATH,
