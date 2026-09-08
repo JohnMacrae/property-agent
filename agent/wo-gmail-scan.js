@@ -336,7 +336,8 @@ function formatTelegramReport(result) {
   if (otherNoise.length) {
     lines.push(`${otherNoise.length} other rentopia.uk PDF(s) ignored — not work orders:`);
     for (const n of otherNoise.slice(0, 10)) {
-      lines.push(`• "${n.subject || '(no subject)'}"`);
+      const subject = (n.subject || '(no subject)').replace(/\s*\[ref:[^\]]*\]\s*$/i, '');
+      lines.push(`• "${subject}"`);
     }
     if (otherNoise.length > 10) lines.push(`• …+${otherNoise.length - 10} more`);
   }
