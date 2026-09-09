@@ -12,6 +12,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const pending = require('./pending');
 const freeagent = require('./freeagent');
+const { WO_RE, DEFAULT_FROM } = require('./wo-colour');
 
 const AGENT_DIR = process.env.AGENT_DIR || path.dirname(__filename);
 const LLM_BACKEND = (process.env.LLM_BACKEND || 'openrouter').toLowerCase();
@@ -118,6 +119,34 @@ function runCmd(bin, args, { timeoutMs = 60_000 } = {}) {
       resolve({ ok: false, error: e.message });
     });
   });
+}
+
+// gcal_create_event dedup guard (BUG-020): a session must not create a second
+// Maintenance event for a WO number that already has one — see NEXT.md
+// 2026-09-09, where three fresh duplicates got created for already-complete
+// WOs. Cache is per-process (one session per agent-runner.js run), lazily
+// loaded once per calendar and topped up with events this session creates,
+// so a session that creates two events for the same WO in one run also
+// catches itself.
+const woEventCache = new Map(); // calendar -> array of {summary, description}
+
+async function loadWoEventCache(calendar) {
+  if (woEventCache.has(calendar)) return woEventCache.get(calendar);
+  const to = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const result = await runCmd(path.join(AGENT_DIR, 'gcal.js'), [
+    'list-events',
+    '--calendar', calendar,
+    '--from', `${DEFAULT_FROM}T00:00:00Z`,
+    '--to', `${to}T23:59:59Z`,
+    '--limit', '500',
+  ]);
+  const events = result.ok && Array.isArray(result.events) ? result.events : [];
+  woEventCache.set(calendar, events);
+  return events;
+}
+
+function findExistingWoEvent(events, woNumber) {
+  return events.find((e) => `${e.summary || ''} ${e.description || ''}`.toUpperCase().includes(woNumber));
 }
 
 const TOOLS = [
@@ -598,14 +627,33 @@ async function executeTool(name, args, context = {}) {
       return runCmd(path.join(AGENT_DIR, 'gcal.js'), argv);
     }
     case 'gcal_create_event': {
+      const calendar = a.calendar || 'Maintenance';
+      const woMatch = `${a.summary || ''} ${a.description || ''}`.match(WO_RE);
+      if (woMatch) {
+        const woNumber = woMatch[0].toUpperCase();
+        const events = await loadWoEventCache(calendar);
+        const existing = findExistingWoEvent(events, woNumber);
+        if (existing) {
+          return {
+            ok: false,
+            error: `${woNumber} already has a calendar event on ${calendar} `
+              + `(id ${existing.id}, "${existing.summary}") — not creating a duplicate. `
+              + `If this is genuinely a new job, use a different WO number or update the existing event instead.`,
+          };
+        }
+      }
       const argv = [
         'create-event',
-        '--calendar', a.calendar || 'Maintenance',
+        '--calendar', calendar,
         '--summary', a.summary || '',
         '--date', a.date || '',
       ];
       if (a.description) argv.push('--description', a.description);
-      return runCmd(path.join(AGENT_DIR, 'gcal.js'), argv);
+      const result = await runCmd(path.join(AGENT_DIR, 'gcal.js'), argv);
+      if (woMatch && result.ok && result.event) {
+        woEventCache.get(calendar).push(result.event);
+      }
+      return result;
     }
     case 'gcal_update_event': {
       const argv = [
