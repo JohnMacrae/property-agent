@@ -68,6 +68,14 @@ WO001496 and WO001557 alone: both are older duplicates where **both** copies are
 complete, so there's no way to tell from the calendar which one is "real" — needs a human glance
 if it matters. See `BUGS.md` BUG-020 for full detail.
 
+**Follow-up same session: confirmed WO001557's duplicate had actually been double-invoiced in
+FreeAgent** (Aug 2026, before today's fix) — checked live: the duplicate invoice (ref 132) is
+genuinely deleted from FreeAgent (404 by invoice id), the real one (ref 131) is still `Open`. No
+live double-charge today, but the ledger shows both were emailed in the same send batch before
+the duplicate was deleted, so a duplicate invoice email likely did go out at the time. Historical,
+already resolved, can't recur now the calendar-level dedup guard is in. Full detail in `BUGS.md`
+BUG-020.
+
 ## Next actions
 
 1. Watch the next scheduled session to confirm the "Current time: ... BST (Europe/London)"
