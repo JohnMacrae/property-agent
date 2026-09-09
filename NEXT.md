@@ -1,6 +1,6 @@
 # NEXT — Property Agent / Property Docs
 
-Last updated: **2026-09-08**
+Last updated: **2026-09-09**
 
 > Older detail (Stage A–F invoice-automation plan, the 2026-07 decouple-from-OB1 work,
 > WO→Paperless bridge fixes, Telegram pending-question fix, etc.) has been trimmed from this
@@ -39,6 +39,35 @@ written 2026-09-01) and `gcal.js` already prefers `GOOGLE_REFRESH_TOKEN_FILE` ov
 env var, so this is a real config improvement, not a mystery diff. Calendar auth confirmed OK
 in the post-rebuild boot log.
 
+**2026-09-09: same trap, different shape.** John reported the `[ref:...]` suffix still showing
+in the noise-PDF Telegram report, "we were meant to have fixed this yesterday." Checked: commit
+`706b318` (2026-09-08 11:50 BST) added the strip regex to `formatTelegramReport` in
+`wo-gmail-scan.js` — but the container image had been built at 09:56 UTC (10:56 BST) that same
+morning, **before** the commit landed. So the fix was in git but never in the running image.
+Not a code bug — rebuilt (`docker compose build agent && docker compose up -d agent`), clean
+boot, done. Lesson: a same-day "rebuilt the image" note in this file does **not** mean every
+commit from that day is deployed — check the commit's timestamp against the image build time,
+don't assume.
+
+**2026-09-09: BUG-020 fixed (calendar dedup) + 3 duplicate events cleaned up.** John reported
+`/wo-report` listing WOs that were already marked done. Checked the live Maintenance calendar:
+WO001513, WO001518, WO001522 each had a genuine complete event from June **and** a fresh,
+untouched duplicate dated 7 Sep — `gcal_create_event` had no dedup check (this was BUG-020,
+open since 2026-07-29, and it had recurred). Fixed properly: `agent-runner.js`'s
+`gcal_create_event` case now extracts the WO number from the summary/description and checks it
+against a session-scoped cache of Maintenance events (lazily loaded via `gcal.js list-events`
+from `wo-colour.DEFAULT_FROM`, topped up with events the session itself creates) — a match
+returns `ok:false` with the existing event's id instead of creating a duplicate. Verified against
+the live calendar (correctly blocked for WO001518, correctly allowed for a fake WO with no
+existing event). Rebuilt and deployed, clean boot.
+
+Also marked the 3 live 7-Sep duplicates `Cancelled — duplicate of an already-completed event...`
+via `gcal.js update-event` (no `delete-event` command exists in `gcal.js`, and this route is
+reversible) — confirmed via `wo-report.collect()` they no longer show as outstanding. Left
+WO001496 and WO001557 alone: both are older duplicates where **both** copies are already marked
+complete, so there's no way to tell from the calendar which one is "real" — needs a human glance
+if it matters. See `BUGS.md` BUG-020 for full detail.
+
 ## Next actions
 
 1. Watch the next scheduled session to confirm the "Current time: ... BST (Europe/London)"
@@ -52,6 +81,10 @@ in the post-rebuild boot log.
 4. Watch the next real invoice-run (06:00) to confirm minimum-charge drafts create cleanly.
 5. WO-capture parallel run (property-agent native vs `mail-reader`'s `work-order-processor`)
    — compare a few more days of logs before retiring the old Python container.
+6. Watch the next session that creates a Maintenance event to confirm the new BUG-020 dedup
+   guard doesn't false-positive on a legitimate new WO (it only matches on WO number substring,
+   so a WO number reused for a genuinely different job — shouldn't happen, but hasn't been
+   observed in practice yet — would be wrongly blocked).
 
 ## Do not re-litigate
 
@@ -95,6 +128,11 @@ in the post-rebuild boot log.
   "Completed — 1.5 hours"). Unstructured, but present.
 - Gmail re-auth: `get_token.py` from John's laptop with `py -3`, writing to
   `W:\gmail-mcp\config\<account>\token.json`. Not the container-based helper.
+- **`gcal_create_event` refuses to create a second Maintenance event for a WO number that
+  already has one** (BUG-020 fix, 2026-09-09) — session-scoped cache in `agent-runner.js`
+  (`woEventCache`), not persisted between sessions. If a genuinely new job needs a new event for
+  a WO number that already has one (shouldn't happen — WO numbers aren't reused), the tool call
+  will fail; that's intentional, don't loosen it without checking why first.
 
 ## Key paths
 
