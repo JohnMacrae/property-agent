@@ -79,3 +79,17 @@ As of 2026-08-25, WO capture is native to property-agent (`agent/gmail.js` + `ag
 | `tools/wo_audit.py` | Gmail work-order audit (broader than the processor's query) |
 | `tools/fa_list.js` | Read-only FreeAgent invoice lister |
 | `../CONTAINERS.html`, `../PORTS.html` | NAS-wide stack index and port registry |
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues for JohnMacrae/property-agent (via `gh`). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
